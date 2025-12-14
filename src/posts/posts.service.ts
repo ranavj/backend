@@ -21,7 +21,7 @@ export class PostsService {
     });
 
     // 🧹 CACHE INVALIDATION:
-    // Jab nayi post aaye, toh purana cache delete kar do, 
+    // Jab nayi post aaye, toh purana cache delete kar do,
     // taaki user ko naya data dikhe.
     await this.cacheManager.del('feed_posts');
     return newPost.save();
@@ -39,7 +39,7 @@ export class PostsService {
     }
 
     console.log(`🐢 Fetching from MongoDB (Skip: ${skip}, Limit: ${limit})`);
-    
+
     // 2. MongoDB Query with Skip & Limit
     const posts = await this.postModel
       .find()

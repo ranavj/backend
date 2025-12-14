@@ -12,7 +12,7 @@ export class Post {
   imageUrl: string;
 
   @Prop({ required: true }) // Kaunse User ne post kiya (Postgres ID)
-  authorId: string; 
+  authorId: string;
 
   @Prop({ default: 0 })
   likes: number;

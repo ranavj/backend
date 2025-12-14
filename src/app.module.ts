@@ -53,16 +53,19 @@ import { redisStore } from 'cache-manager-redis-yet';
       playground: true, // Browser mein Query test karne ke liye interface milega
     }),
 
-    // 👇 CACHE MODULE ADD KAREIN
+   // 👇 CACHE MODULE UPDATE KAREIN
     CacheModule.registerAsync({
-      isGlobal: true, // Poori app mein accessible hoga
-      useFactory: async () => ({
+      isGlobal: true,
+      imports: [ConfigModule], // ConfigModule import karein
+      inject: [ConfigService], // ConfigService inject karein
+      useFactory: async (configService: ConfigService) => ({
         store: await redisStore({
           socket: {
-            host: 'localhost', // Docker Redis Host
-            port: 6379,
+            // 👇 'localhost' hata kar yeh likhein:
+            host: configService.get<string>('REDIS_HOST') || 'localhost',
+            port: configService.get<number>('REDIS_PORT') || 6379,
           },
-          ttl: 60 * 1000, // Default: Data 60 seconds tak zinda rahega
+          ttl: 60 * 1000,
         }),
       }),
     }),
