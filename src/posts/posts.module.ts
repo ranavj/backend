@@ -7,14 +7,22 @@ import { PostsResolver } from './posts.resolver';
 import { UsersModule } from 'src/users/users.module';
 import { CloudinaryProvider } from 'src/cloudinary.provider';
 import { CloudinaryService } from 'src/cloudinary.service';
+import { BullModule } from '@nestjs/bullmq';
+import { PostsProcessor } from './posts.processor';
+import { PostsGateway } from './posts.gateway';
 
 @Module({
   imports:[
     // MongoDB Collection 'posts' naam se banega
     MongooseModule.forFeature([{ name: Post.name, schema: PostSchema }]),
     UsersModule, // 👈 Add here
+    // 👇 2. Specific Queue Register Karein
+    BullModule.registerQueue({
+      name: 'post-processing', // Is queue ka naam yaad rakhna!
+    }),
   ],
   controllers: [PostsController],
-  providers: [PostsService, PostsResolver, CloudinaryProvider, CloudinaryService],
+  providers: [PostsService, PostsResolver, CloudinaryProvider, CloudinaryService, PostsProcessor, PostsGateway],
+  exports: [BullModule]
 })
 export class PostsModule {}

@@ -18,6 +18,7 @@ export class PostsController {
   @UseInterceptors(FileInterceptor('file')) // 'file' field name hoga form mein
   async create(
     @UploadedFile() file: Express.Multer.File, // File yahan aayegi
+    @Body('title') title: string,
     @Body('content') content: string, // Text content yahan aayega
     @Request() req
   ) {
@@ -31,7 +32,7 @@ export class PostsController {
 
     // 2. Database mein save karo
     return this.postsService.create(
-      { content, imageUrl }, // DTO match karana padega
+      { content, imageUrl, title }, // DTO match karana padega
       req.user.userId
     );
   }

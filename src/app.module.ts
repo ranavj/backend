@@ -12,6 +12,8 @@ import { GraphQLModule } from '@nestjs/graphql';
 import { join } from 'path';
 import { CacheModule } from '@nestjs/cache-manager';
 import { redisStore } from 'cache-manager-redis-yet';
+import { User } from './users/entities/user.entity';
+import { BullModule } from '@nestjs/bullmq';
 
 @Module({
   imports: [
@@ -26,13 +28,35 @@ import { redisStore } from 'cache-manager-redis-yet';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        host: configService.get<string>('POSTGRES_HOST'),
-        port: configService.get<number>('POSTGRES_PORT'),
-        username: configService.get<string>('POSTGRES_USER'),
-        password: configService.get<string>('POSTGRES_PASSWORD'),
-        database: configService.get<string>('POSTGRES_DB'),
-        autoLoadEntities: true, // Models automatic load honge
-        synchronize: true, // Dev mode mein tables automatic banenge (Prod mein false rakhna)
+       // 👇 REPLICATION SETUP STARTS HERE
+        replication: {
+          // 1. MASTER (Write) - Likhne ke liye
+          master: {
+            host: configService.get<string>('POSTGRES_HOST'),
+            port: configService.get<number>('POSTGRES_PORT'),
+            username: configService.get<string>('POSTGRES_USER'),
+            password: configService.get<string>('POSTGRES_PASSWORD'),
+            database: configService.get<string>('POSTGRES_DB'),
+          },
+          // 2. SLAVES (Read) - Padhne ke liye (List of mirrors)
+          slaves: [
+            {
+              // Real world mein yahan 'postgres-slave-1' ka IP aata
+              // Abhi hum same container use kar rahe hain simulation ke liye
+              host: configService.get<string>('POSTGRES_HOST'), 
+              port: configService.get<number>('POSTGRES_PORT'),
+              username: configService.get<string>('POSTGRES_USER'),
+              password: configService.get<string>('POSTGRES_PASSWORD'),
+              database: configService.get<string>('POSTGRES_DB'),
+            },
+            // Future mein hum aur slaves add kar sakte hain
+          ],
+        },
+        
+        entities: [User], // Apni entities yahan define karein (autoLoadEntities hata diya)
+        autoLoadEntities: true, // Ya isse true rakhein
+        synchronize: true, // Prod mein false hona chahiye
+        logging: false, // 👈 Isse console mein SQL queries dikhengi
       }),
     }),
 
@@ -68,6 +92,18 @@ import { redisStore } from 'cache-manager-redis-yet';
           ttl: 60 * 1000,
         }),
       }),
+    }),
+    // 👇 1. BullMQ Config (Redis Connection)
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        connection: {
+          host: configService.get('REDIS_HOST') || 'redis', // Docker service name
+          port: 6379,
+          password: 'adminpassword'
+        },
+      }),
+      inject: [ConfigService],
     }),
     UsersModule,
 

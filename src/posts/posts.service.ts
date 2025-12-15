@@ -6,25 +6,45 @@ import { Model } from 'mongoose';
 import { Post } from './entities/post.entity';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 @Injectable()
 export class PostsService {
   constructor(
     @InjectModel(Post.name) private postModel: Model<Post>,
     @Inject(CACHE_MANAGER) private cacheManager: Cache, // 👈 Cache Manager Inject kiya
-  ) {}
+    // 👇 QUEUE INJECT KAREIN
+    @InjectQueue('post-processing') private postQueue: Queue
+  ) { }
 
   async create(createPostDto: CreatePostDto, userId: string) {
-    // Post create karte waqt User ID bhi save karein
+    // 1. Save to MongoDB
     const newPost = new this.postModel({
       ...createPostDto,
       authorId: userId,
     });
+    const savedPost = await newPost.save();
 
-    // 🧹 CACHE INVALIDATION:
-    // Jab nayi post aaye, toh purana cache delete kar do,
-    // taaki user ko naya data dikhe.
-    await this.cacheManager.del('feed_posts');
-    return newPost.save();
+    // 👇 FIX: Document ko Plain Object mein convert karein
+    // Isse saare Mongoose ke hidden methods hat jayenge aur clean data milega
+    const postData = savedPost.toObject(); 
+
+    // 2. Add to Queue (Ab 'postData' use karein)
+    await this.postQueue.add('heavy-task', {
+      postId: postData._id,
+      title: postData.title, // 👈 Ab yeh undefined nahi hoga
+      authorId: userId
+    });
+
+    // Log mein bhi 'postData.title' use karein
+    console.log(`📨 Job added to queue for Post: ${postData.title}`);
+
+    // 3. Cache Clear
+    try {
+        await this.cacheManager.del('feed_posts_0_10');
+    } catch (e) {}
+
+    return postData;
   }
 
   // 👇 Update findAll to accept arguments
@@ -46,11 +66,17 @@ export class PostsService {
       .sort({ createdAt: -1 })
       .skip(skip)   // 👈 Kitne posts skip karein
       .limit(limit) // 👈 Kitne posts layein
+      .lean() // 👈 YEH ADD KAREIN (Document ko Plain JSON banata hai)
       .exec();
 
-    // 3. Save to Cache
-    await (this.cacheManager as any).set(cacheKey, posts, 60000);
-
+    // 3. Save to Cache (Debug log add kiya hai)
+    try {
+      // Note: 'ttl' milliseconds mein hota hai recent versions mein (60000 = 60s)
+      await this.cacheManager.set(cacheKey, posts, 60000);
+      console.log(`💾 Saved to Redis: ${cacheKey}`);
+    } catch (error) {
+      console.error("❌ Redis Save Error:", error);
+    }
     return posts;
   }
 

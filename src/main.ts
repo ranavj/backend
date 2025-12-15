@@ -9,6 +9,7 @@ async function bootstrap() {
   // 👇 Yeh line add karein (Security Gate kholne ke liye)
   app.enableCors({
     origin: 'http://localhost:4200', // Sirf Angular ko allow karein
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
   await app.listen(process.env.PORT ?? 3000);

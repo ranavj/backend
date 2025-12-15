@@ -16,6 +16,9 @@ export class Post {
 
   @Prop({ default: 0 })
   likes: number;
+  
+  @Prop({ required: true }) // 👈 Yeh hona zaroori hai
+  title: string;
 }
 
 export const PostSchema = SchemaFactory.createForClass(Post);
