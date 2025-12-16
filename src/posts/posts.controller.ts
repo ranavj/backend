@@ -1,16 +1,18 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, UseInterceptors, UploadedFile, Query } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { CloudinaryService } from 'src/cloudinary.service';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { SearchService } from 'src/search/search.service';
 
 @Controller('posts')
 export class PostsController {
   constructor(
     private readonly postsService: PostsService,
-    private readonly cloudinaryService: CloudinaryService // Inject service
+    private readonly cloudinaryService: CloudinaryService ,// Inject service
+    private readonly searchService: SearchService //  Inject
   ) {}
 
   @UseGuards(AuthGuard('jwt')) // 🔒 TALA: Sirf Valid Token wale allow honge
@@ -37,6 +39,12 @@ export class PostsController {
     );
   }
 
+  // 👇 GET /posts/search?q=apple
+  @Get('search')
+    async searchPosts(@Query('q') query: string) {
+      if (!query) return [];
+      return this.searchService.search(query);
+    }
   @Get()
   findAll() {
     return this.postsService.findAll();

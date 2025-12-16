@@ -8,13 +8,15 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { SearchService } from 'src/search/search.service';
 @Injectable()
 export class PostsService {
   constructor(
     @InjectModel(Post.name) private postModel: Model<Post>,
     @Inject(CACHE_MANAGER) private cacheManager: Cache, // 👈 Cache Manager Inject kiya
     // 👇 QUEUE INJECT KAREIN
-    @InjectQueue('post-processing') private postQueue: Queue
+    @InjectQueue('post-processing') private postQueue: Queue,
+    private searchService: SearchService //  Inject
   ) { }
 
   async create(createPostDto: CreatePostDto, userId: string) {
@@ -22,27 +24,40 @@ export class PostsService {
     const newPost = new this.postModel({
       ...createPostDto,
       authorId: userId,
+      createdAt: new Date(), // Date ensure karein
     });
     const savedPost = await newPost.save();
 
-    // 👇 FIX: Document ko Plain Object mein convert karein
-    // Isse saare Mongoose ke hidden methods hat jayenge aur clean data milega
-    const postData = savedPost.toObject(); 
+    // Plain Object Conversion (Mongoose magic hatane ke liye)
+    const postData = savedPost.toObject();
 
-    // 2. Add to Queue (Ab 'postData' use karein)
-    await this.postQueue.add('heavy-task', {
+    // 👇 2. Sync with Elasticsearch (NAYA STEP)
+    // Hum isse 'await' kar rahe hain taaki agar search index fail ho toh pata chale
+    // (Aap chahein toh isse bina await ke bhi chhod sakte hain speed ke liye)
+    try {
+      await this.searchService.indexPost(postData);
+      console.log(`🔍 Post Indexed to Elastic: ${postData.title}`);
+    } catch (error) {
+      console.error('❌ Elasticsearch Indexing Failed:', error);
+      // Fail hone par hum process nahi rokenge, bas log karenge
+    }
+
+    // 3. Add to Queue (Heavy Processing)
+    await this.postQueue.add('post-job', { // Job name match karein ('heavy-task' ya 'post-job')
       postId: postData._id,
-      title: postData.title, // 👈 Ab yeh undefined nahi hoga
-      authorId: userId
+      title: postData.title,
+      authorId: userId,
+      // content: postData.content // Agar worker ko content chahiye
     });
 
-    // Log mein bhi 'postData.title' use karein
     console.log(`📨 Job added to queue for Post: ${postData.title}`);
 
-    // 3. Cache Clear
+    // 4. Cache Clear
     try {
-        await this.cacheManager.del('feed_posts_0_10');
-    } catch (e) {}
+      await this.cacheManager.del('feed_posts_0_10');
+    } catch (e) {
+      console.error('Cache clear failed', e);
+    }
 
     return postData;
   }

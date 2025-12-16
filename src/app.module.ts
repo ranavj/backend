@@ -13,8 +13,13 @@ import { join } from 'path';
 import { CacheModule } from '@nestjs/cache-manager';
 import { redisStore } from 'cache-manager-redis-yet';
 import { User } from './users/entities/user.entity';
+import { makeCounterProvider, PrometheusModule } from '@willsoto/nestjs-prometheus';
+import { MetricsInterceptor } from './common/interceptors/metrics.interceptor';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { BullModule } from '@nestjs/bullmq';
-
+import { BullBoardModule } from '@bull-board/nestjs';
+import { ExpressAdapter } from '@bull-board/express';
+import { SearchModule } from './search/search.module';
 @Module({
   imports: [
     // 1. Config Module (env file padhne ke liye)
@@ -105,13 +110,40 @@ import { BullModule } from '@nestjs/bullmq';
       }),
       inject: [ConfigService],
     }),
+
+    // Yeh automatic '/metrics' route bana dega
+    PrometheusModule.register({
+      defaultMetrics:{
+        enabled: true
+      }
+    }),
+    // 👇 BULL BOARD SETUP
+    BullBoardModule.forRoot({
+      route: '/queues', // Dashboard is URL par dikhega
+      adapter: ExpressAdapter,
+    }),
     UsersModule,
 
     AuthModule,
 
     PostsModule,
+
+    SearchModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // HTTP Request Counter Banayein
+    makeCounterProvider({
+      name: 'http_requests_total', // Graph is naam ko dhoond raha hai
+      help: 'Total number of HTTP requests',
+      labelNames: ['method', 'path', 'status'], // Filters
+    }),
+    // INTERCEPTOR REGISTER KAREIN
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: MetricsInterceptor,
+    },
+  ],
 })
 export class AppModule {}
